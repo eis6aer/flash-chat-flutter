@@ -15,6 +15,23 @@ class _ChatScreenState extends State<ChatScreen> {
   final _auth = FirebaseAuth.instance;
   FirebaseUser loggedInUser;
   TextEditingController _messageController = TextEditingController();
+  ScrollController _scrollController = new ScrollController();
+
+//  void getMessages() async {
+//    final messages = await _fireStore.collection("messages").getDocuments();
+//
+//    for (var message in messages.documents) {
+//      print(message.data);
+//    }
+//  }
+
+  void messagesStream() async {
+    await for(var snapshot in _fireStore.collection("messages").snapshots()) {
+      for (var message in snapshot.documents) {
+        print(message.data);
+      }
+    }
+  }
 
   void getCurrentUser() async {
     try {
@@ -37,6 +54,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         leading: null,
         actions: <Widget>[
@@ -55,6 +73,32 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            StreamBuilder<QuerySnapshot>(
+              builder: (context, snapshot) {
+                var messageList = List<MessageBubble>();
+                if (snapshot.hasData) {
+                  final messages = snapshot.data.documents.reversed;
+                  for (var message in messages) {
+                    messageList.add(
+                      MessageBubble(
+                        sender: "${message.data["sender"]}",
+                        text: "${message.data["text"]}",
+                        isMe: message.data["sender"] == loggedInUser.email
+                      ),
+                    );
+                  }
+                }
+                return Expanded(
+                  child: ListView(
+                    reverse: true,
+                    controller: _scrollController,
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 20),
+                    children: messageList,
+                  ),
+                );
+              },
+              stream: _fireStore.collection("messages").orderBy("timestamp").snapshots(),
+            ),
             Container(
               decoration: kMessageContainerDecoration,
               child: Row(
@@ -73,7 +117,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     onPressed: () {
                       _fireStore.collection("messages").add({
                         'sender': loggedInUser.email,
-                        'text': _messageController.text
+                        'text': _messageController.text,
+                        'timestamp': FieldValue.serverTimestamp(),
                       }).then((value) {
                         _messageController.clear();
                       });
@@ -88,6 +133,55 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class MessageBubble extends StatelessWidget {
+  MessageBubble({
+    this.sender,
+    this.text,
+    this.isMe
+  });
+
+  final String sender;
+  final String text;
+  final bool isMe;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.all(10.0),
+      child: Column(
+        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            sender,
+            style: TextStyle(
+              fontSize: 12.0,
+              color: Colors.grey
+            ),
+          ),
+          SizedBox(
+            height: 5.0,
+          ),
+          Material(
+            borderRadius: isMe ? BorderRadius.only(topLeft: Radius.circular(30.0), topRight: Radius.circular(0.0), bottomLeft: Radius.circular(30.0), bottomRight: Radius.circular(30.0)) :
+            BorderRadius.only(topLeft: Radius.circular(0.0), topRight: Radius.circular(30.0), bottomLeft: Radius.circular(30.0), bottomRight: Radius.circular(30.0)),
+            elevation: 5.0,
+            color: isMe ? Colors.lightBlueAccent : Colors.green,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+              child: Text(
+                "$text",
+                style: TextStyle(
+                    color: Colors.white
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
